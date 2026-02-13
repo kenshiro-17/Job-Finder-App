@@ -1,76 +1,189 @@
-# Match Pilot
+# Job Finder App
 
-Self-hosted job search assistant for Germany-focused sources (Indeed + StepStone + LinkedIn + Arbeitnow + BerlinStartupJobs), powered by resume matching and application tracking.
+Self-hosted job search and application tracking platform focused on the Germany tech market.
+
+Upload your resume, search across multiple job sources, rank jobs by fit, track applications in a Kanban board, and generate tailored cover letters.
 
 ## Features
 
-- Upload and parse PDF/DOCX resumes
-- Account login with per-user data isolation
-- Search jobs with source selection and filters
-- Rank jobs with match score breakdowns
-- Track applications in a Kanban-style board
-- Generate cover letters from resume + job context
-- Cache search results for 30 minutes
-- Browse and clear stored jobs (`/stored-jobs.html`)
+- Resume upload and parsing (`PDF`, `DOCX`)
+- Multi-user accounts with data isolation per user
+- Job search across:
+  - `Indeed`
+  - `StepStone`
+  - `LinkedIn (guest listings)`
+  - `Arbeitnow`
+  - `BerlinStartupJobs`
+- Match scoring between resume and job content
+- Job caching and search history
+- Stored jobs page with filtering, pagination, single delete, and clear-all
+- Application tracker with lane drag-and-drop, bulk delete, and clear-all
+- Cover letter generation and save support
+- Recency controls:
+  - Jobs older than 21 days are excluded
+  - Freshly scraped jobs are prioritized
+- Per-user stored jobs cap (minimum 10,000)
 
-## Stack
+## Tech Stack
 
-- Backend: FastAPI, SQLAlchemy, SQLite, Playwright, scikit-learn
-- Frontend: Vanilla JS SPA + SortableJS
-- Infra: Docker Compose, Nginx, Redis (optional cache layer)
+- Backend: `FastAPI`, `SQLAlchemy`, `SQLite`
+- Frontend: `Vanilla JS`, `HTML`, `CSS`, `SortableJS`
+- Scraping: `httpx`, `BeautifulSoup`, optional `Playwright`
+- NLP/Parsing: `pdfplumber`, `pypdf`, `python-docx`, optional `spaCy`
+- Infra: `Docker Compose`, `Nginx`, optional `Redis`
 
-## Local Development (without Docker)
+## Project Structure
 
-1. Create env and install dependencies:
-
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+```text
+backend/
+  app/
+    api/
+    models/
+    schemas/
+    services/
+    main.py
+frontend/
+  index.html
+  stored-jobs.html
+  login.html
+  css/
+  js/
+docker-compose.yml
+nginx.conf
 ```
 
-Optional scraping/NLP extras:
+## Quick Start (Local)
+
+### 1) Create environment and install dependencies
 
 ```bash
-python -m pip install spacy playwright playwright-stealth fake-useragent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+```
+
+### 2) Install optional scraping/NLP extras (recommended)
+
+```bash
+pip install 'playwright>=1.41,<2' 'spacy>=3.8,<4' eval_type_backport
 python -m playwright install chromium
 python -m spacy download de_core_news_sm
 ```
 
-2. Run backend:
+### 3) Run backend
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+cd backend
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-3. Serve frontend:
+Open:
+
+- App: `http://127.0.0.1:8000/`
+- API docs: `http://127.0.0.1:8000/docs`
+- Health: `http://127.0.0.1:8000/health`
+
+The backend serves the frontend directly (recommended local mode).
+
+## Environment Variables
+
+Copy from `.env.example` and adjust as needed.
+
+Core settings:
+
+- `DATABASE_URL` (default: `sqlite:///./db/jobs.db`)
+- `AUTH_SECRET` (set a strong secret in non-dev environments)
+- `DEFAULT_OWNER_USERNAME`
+- `DEFAULT_OWNER_PASSWORD`
+- `UPLOAD_DIR`
+- `OUTPUT_DIR`
+- `MAX_JOB_AGE_DAYS` (default: `21`)
+- `NEWEST_WINDOW_MINUTES` (default: `60`)
+- `MAX_STORED_JOBS_PER_USER` (minimum effective value: `10000`)
+
+Scraping tuning:
+
+- `MAX_JOBS_PER_SOURCE`
+- `MAX_SCRAPE_PAGES`
+- `SCRAPE_DELAY_SECONDS`
+
+## Default Account Behavior
+
+On startup, runtime migrations ensure an owner account exists using:
+
+- `DEFAULT_OWNER_USERNAME`
+- `DEFAULT_OWNER_PASSWORD`
+
+You can also create additional users via the UI (`/login.html`).
+
+## API Overview
+
+Auth:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+
+Resumes:
+
+- `POST /api/resumes/upload`
+- `GET /api/resumes`
+- `GET /api/resumes/{resume_id}`
+- `DELETE /api/resumes/{resume_id}`
+- `PUT /api/resumes/{resume_id}/set-active`
+
+Jobs:
+
+- `POST /api/jobs/search`
+- `GET /api/jobs`
+- `GET /api/jobs/{job_id}`
+- `GET /api/jobs/search-history`
+- `DELETE /api/jobs/{job_id}`
+- `DELETE /api/jobs/clear`
+
+Applications:
+
+- `GET /api/applications`
+- `POST /api/applications`
+- `PATCH /api/applications/{app_id}/status`
+- `DELETE /api/applications/{app_id}`
+- `POST /api/applications/bulk-delete`
+- `DELETE /api/applications/clear`
+- `GET /api/applications/stats`
+
+Cover letters:
+
+- `POST /api/cover-letters/generate`
+- `GET /api/cover-letters/templates`
+- `POST /api/cover-letters/save`
+
+## Testing
+
+From repo root:
 
 ```bash
-cd ../frontend
-python3 -m http.server 8080
+source .venv/bin/activate
+pytest backend/tests -q
 ```
 
-4. Open `http://localhost:8080`.
+## Deployment
 
-## Docker
+### Option A: Docker Compose (single host)
 
 ```bash
 docker-compose up --build
 ```
 
-- Frontend + API gateway: `http://localhost`
-- Backend direct API: `http://localhost:8000`
+- Frontend + API via Nginx: `http://localhost`
+- Backend direct: `http://localhost:8000`
 
-## Deployment: Railway (Backend) + Vercel (Frontend)
+### Option B: Vercel (frontend) + Railway (backend)
 
-### 1. Deploy backend to Railway
+Backend (Railway):
 
-1. Create a new Railway project and add a service from this repo.
-2. Set service root directory to `backend` (or deploy `backend` as its own repo).
-3. Use Docker deployment (Railway will build `backend/Dockerfile`).
-4. Attach a persistent volume and mount it at `/data`.
-5. Set these Railway environment variables:
+1. Deploy `backend/` as a Railway service.
+2. Attach persistent volume mounted at `/data`.
+3. Set env vars (example):
 
 ```bash
 DATABASE_URL=sqlite:////data/jobs.db
@@ -85,39 +198,18 @@ NEWEST_WINDOW_MINUTES=60
 MAX_STORED_JOBS_PER_USER=10000
 ```
 
-6. Generate a public Railway domain for the service.
+Frontend (Vercel):
 
-### 2. Connect frontend on Vercel
+1. Deploy `frontend/`.
+2. In `frontend/vercel.json`, point `/api/:path*` rewrite to your Railway backend domain.
 
-1. Create a Vercel project from this same repo.
-2. Set root directory to `frontend`.
-3. Edit `frontend/vercel.json` and replace:
-   - `https://REPLACE_WITH_YOUR_RAILWAY_DOMAIN`
-   - with your Railway backend domain, e.g. `https://match-pilot-api.up.railway.app`
-4. Deploy on Vercel.
+## Troubleshooting
 
-Now all frontend `/api/*` calls are proxied by Vercel to Railway, so no browser CORS setup is required.
+- `No jobs from a source`: provider markup may have changed; update selectors in `backend/app/services/job_scraper.py`.
+- `Frontend API calls fail when served separately`: frontend uses `/api` base path, so use backend-served frontend or a reverse proxy/rewrite.
+- `Port already in use`: run backend on a different port, e.g. `--port 8010`.
+- `StepStone/Indeed low yield`: install Playwright + Chromium and increase `MAX_SCRAPE_PAGES`.
 
-## API Overview
+## Legal Notice
 
-- `POST /api/resumes/upload`
-- `GET /api/resumes`
-- `PUT /api/resumes/{id}/set-active`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `POST /api/jobs/search`
-- `GET /api/jobs`
-- `DELETE /api/jobs/clear`
-- `GET /api/jobs/{id}`
-- `GET /api/jobs/search-history`
-- `GET /api/applications`
-- `POST /api/applications`
-- `PATCH /api/applications/{id}/status`
-- `GET /api/applications/stats`
-- `POST /api/cover-letters/generate`
-
-## Notes
-
-- Scrapers depend on public site markup and may require selector updates when providers change HTML.
-- For legal and reliability reasons, keep request rates low and favor caching.
+This project aggregates publicly available job listings. Respect each provider’s terms of service and robots policies in your deployment environment.
