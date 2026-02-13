@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Finder</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <link rel="stylesheet" href="/css/kanban.css" />
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.5/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.1/Sortable.min.js"></script>
+  </head>
+  <body>
+    <nav class="top-nav" aria-label="Primary">
+      <a class="active" href="/">Dashboard</a>
+      <a href="/stored-jobs.html">Stored Jobs</a>
+      <button id="logout-btn" class="nav-logout" type="button">Logout</button>
+    </nav>
+    <header class="site-header">
+      <div class="site-header-row">
+        <div>
+          <p class="eyebrow">Job Finder</p>
+          <h1>Find, Rank, and Track Jobs</h1>
+          <p>Upload your resume, discover high-fit roles, and run your applications like an operating pipeline.</p>
+        </div>
+        <aside class="workspace-meta" aria-label="Workspace context">
+          <p class="workspace-label">Workspace</p>
+          <p class="workspace-title">Personal Job Operations</p>
+          <div class="workspace-chips">
+            <span>Local First</span>
+            <span>Resume Matched</span>
+            <span>Live Search</span>
+          </div>
+        </aside>
+      </div>
+      <section class="stats-strip">
+        <article class="stat-card">
+          <p class="stat-label">Jobs in View</p>
+          <p id="stat-jobs" class="stat-value">0</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Average Match</p>
+          <p id="stat-match" class="stat-value">0%</p>
+        </article>
+        <article class="stat-card">
+          <p class="stat-label">Tracked Applications</p>
+          <p id="stat-apps" class="stat-value">0</p>
+        </article>
+      </section>
+    </header>
+
+    <main class="layout">
+      <section class="panel" id="resume-panel">
+        <h2>Resume</h2>
+        <p class="panel-subtitle">Upload and switch your active profile for matching and cover letters.</p>
+        <form id="resume-upload-form">
+          <input type="file" id="resume-file" accept=".pdf,.docx" required />
+          <button type="submit">Upload Resume</button>
+        </form>
+        <div class="field-group">
+          <label for="active-resume">Active Resume</label>
+          <select id="active-resume"></select>
+        </div>
+        <ul id="resume-list" class="list"></ul>
+      </section>
+
+      <section class="panel" id="search-panel">
+        <h2>Job Search</h2>
+        <p class="panel-subtitle">Run cross-source search and keep either the latest result or an accumulating session set.</p>
+        <form id="job-search-form" class="grid-form">
+          <div class="field-group">
+            <label for="keywords">Keywords</label>
+            <input id="keywords" type="text" placeholder="Data Engineer" required />
+          </div>
+          <div class="field-group">
+            <label for="location">Location</label>
+            <input id="location" type="text" placeholder="Berlin, Germany" required />
+          </div>
+          <div class="field-group">
+            <label for="salary-min">Minimum Salary (€)</label>
+            <input id="salary-min" type="number" min="0" step="1000" />
+          </div>
+          <div class="field-group">
+            <label>Sources</label>
+            <div class="inline-checks">
+              <label><input type="checkbox" name="source" value="indeed" checked /> Indeed</label>
+              <label><input type="checkbox" name="source" value="stepstone" checked /> StepStone</label>
+              <label><input type="checkbox" name="source" value="linkedin" checked /> LinkedIn</label>
+              <label><input type="checkbox" name="source" value="arbeitnow" checked /> Arbeitnow</label>
+              <label><input type="checkbox" name="source" value="berlinstartupjobs" checked /> BerlinStartupJobs</label>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Result Mode</label>
+            <div class="segment-control" role="radiogroup" aria-label="Result mode">
+              <label><input type="radio" name="result-mode" value="session" checked /> Accumulate Session</label>
+              <label><input type="radio" name="result-mode" value="latest" /> Latest Search Only</label>
+            </div>
+          </div>
+          <button id="search-submit-btn" type="submit">Search Jobs</button>
+        </form>
+        <div class="results-toolbar">
+          <div id="search-meta" class="meta" aria-live="polite"></div>
+          <div class="stored-actions">
+            <button id="clear-search-results" type="button" class="quiet-btn">Clear Session Results</button>
+            <button id="clear-stored-jobs-dashboard" type="button" class="danger-btn">Clear All Stored Jobs</button>
+          </div>
+        </div>
+        <div id="source-breakdown" class="source-breakdown"></div>
+        <div id="job-results" class="job-grid"></div>
+      </section>
+
+      <section class="panel" id="applications-panel">
+        <div class="panel-title-row">
+          <div>
+            <h2>Application Tracker</h2>
+            <p class="panel-subtitle">Drag cards between stages to keep your pipeline current.</p>
+          </div>
+          <div class="stored-actions">
+            <button id="refresh-apps" type="button" class="quiet-btn">Refresh</button>
+            <button id="delete-selected-apps" type="button" class="danger-btn">Delete Selected</button>
+            <button id="clear-all-apps" type="button" class="danger-btn">Clear All</button>
+          </div>
+        </div>
+        <div id="apps-selection-meta" class="meta"></div>
+        <div id="kanban-board" class="kanban-board">
+          <div class="kanban-column" data-status="to_apply">
+            <h3>To Apply <span id="count-to_apply" class="lane-count">0</span></h3>
+            <div class="kanban-list" id="to_apply"></div>
+          </div>
+          <div class="kanban-column" data-status="applied">
+            <h3>Applied <span id="count-applied" class="lane-count">0</span></h3>
+            <div class="kanban-list" id="applied"></div>
+          </div>
+          <div class="kanban-column" data-status="interviewing">
+            <h3>Interviewing <span id="count-interviewing" class="lane-count">0</span></h3>
+            <div class="kanban-list" id="interviewing"></div>
+          </div>
+          <div class="kanban-column" data-status="rejected">
+            <h3>Rejected <span id="count-rejected" class="lane-count">0</span></h3>
+            <div class="kanban-list" id="rejected"></div>
+          </div>
+          <div class="kanban-column" data-status="accepted">
+            <h3>Accepted <span id="count-accepted" class="lane-count">0</span></h3>
+            <div class="kanban-list" id="accepted"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="cover-letter-modal">
+      <form method="dialog" id="cover-letter-form">
+        <h3>Generate Cover Letter</h3>
+        <div class="field-group">
+          <label for="tone">Tone</label>
+          <select id="tone">
+            <option value="professional">Professional</option>
+            <option value="enthusiastic">Enthusiastic</option>
+            <option value="concise">Concise</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label for="custom-intro">Custom Intro</label>
+          <textarea id="custom-intro" rows="4" placeholder="Optional intro..."></textarea>
+        </div>
+        <input id="cover-letter-job-id" type="hidden" />
+        <menu>
+          <button value="cancel" type="button" id="close-cover-letter">Close</button>
+          <button value="default" type="submit">Generate</button>
+        </menu>
+      </form>
+      <article id="cover-letter-output" class="cover-letter-output"></article>
+    </dialog>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>

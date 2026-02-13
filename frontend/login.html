@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Finder | Login</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/css/main.css" />
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.5/dist/axios.min.js"></script>
+  </head>
+  <body>
+    <main class="auth-shell">
+      <section class="auth-panel">
+        <p class="eyebrow">Job Finder</p>
+        <h1>Sign in</h1>
+        <p class="panel-subtitle">Each account keeps resumes, jobs, and applications private.</p>
+
+        <form id="login-form" class="auth-form">
+          <div class="field-group">
+            <label for="login-username">Username</label>
+            <input id="login-username" required minlength="3" />
+          </div>
+          <div class="field-group">
+            <label for="login-password">Password</label>
+            <input id="login-password" type="password" required minlength="6" />
+          </div>
+          <button type="submit">Login</button>
+        </form>
+
+        <hr />
+
+        <h2>Create account</h2>
+        <form id="register-form" class="auth-form">
+          <div class="field-group">
+            <label for="register-username">Username</label>
+            <input id="register-username" required minlength="3" />
+          </div>
+          <div class="field-group">
+            <label for="register-password">Password</label>
+            <input id="register-password" type="password" required minlength="6" />
+          </div>
+          <button type="submit">Register</button>
+        </form>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+    <script type="module" src="/js/login.js"></script>
+  </body>
+</html>

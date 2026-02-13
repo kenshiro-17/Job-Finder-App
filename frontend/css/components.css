@@ -1,0 +1,261 @@
+.job-grid {
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.job-card,
+.app-card,
+.resume-item {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 14px;
+  padding: 0.9rem;
+}
+
+.job-card {
+  background: linear-gradient(165deg, #ffffff 0%, #f9fbfd 100%);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+  transition: transform 0.16s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.job-card:hover {
+  transform: translateY(-2px);
+  border-color: #bfcedd;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.09);
+}
+
+.job-card h3,
+.app-card h4,
+.resume-item h4 {
+  margin: 0;
+  font-size: 1.02rem;
+  line-height: 1.28;
+}
+
+.job-card .head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.stored-card .head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.job-card .source {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #1f2937;
+  background: #e2e8f0;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  padding: 0.18rem 0.45rem;
+}
+
+.stored-card .source {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #1f2937;
+  background: #e2e8f0;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  padding: 0.18rem 0.45rem;
+}
+
+.job-card .job-ref {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.stored-card .job-ref {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.job-card .company,
+.job-card .location,
+.resume-item .muted,
+.app-card .muted {
+  color: var(--muted);
+  margin: 0.26rem 0;
+  font-size: 0.9rem;
+}
+
+.stored-card .company,
+.stored-card .location {
+  color: var(--muted);
+  margin: 0.26rem 0;
+  font-size: 0.9rem;
+}
+
+.stored-card .location {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.job-card .location {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.job-card .desc {
+  margin: 0.48rem 0 0.35rem;
+  color: #334155;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.job-card .score {
+  margin: 0.48rem 0 0.42rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.score-meter {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.score-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f97316 0%, #2ba86a 100%);
+}
+
+.job-card .actions,
+.app-card .actions,
+.stored-card .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.48rem;
+  margin-top: 0.8rem;
+}
+
+.app-card .app-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-card .app-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.app-card .app-select input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.job-card .job-link {
+  display: inline-block;
+  margin-top: 0.65rem;
+  color: #0b6275;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.stored-card .job-link {
+  display: inline-block;
+  margin-top: 0.65rem;
+  color: #0b6275;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.stored-card .job-link:hover {
+  text-decoration: underline;
+}
+
+.job-card .job-link:hover {
+  text-decoration: underline;
+}
+
+.job-card button.secondary,
+.app-card button.secondary {
+  background: #334155;
+}
+
+.job-card button.compact,
+.stored-card button.compact {
+  padding: 0.45rem 0.68rem;
+  font-size: 0.82rem;
+}
+
+.resume-item {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.resume-item .resume-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.resume-item .active-pill {
+  border: 1px solid #b7d8cc;
+  background: #edf8f3;
+  color: #0f8a5f;
+  border-radius: 999px;
+  padding: 0.16rem 0.45rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.empty-state {
+  border: 1px dashed #bfd0e0;
+  background: #f8fbff;
+  color: #475569;
+  border-radius: 14px;
+  padding: 1rem;
+  text-align: center;
+  font-size: 0.92rem;
+}
+
+dialog {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  max-width: 720px;
+  width: 90vw;
+}
+
+menu {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0;
+}

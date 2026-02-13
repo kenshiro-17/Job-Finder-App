@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Job Finder | Stored Jobs</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.5/dist/axios.min.js"></script>
+  </head>
+  <body>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="/">Dashboard</a>
+      <a class="active" href="/stored-jobs.html">Stored Jobs</a>
+      <button id="logout-btn" class="nav-logout" type="button">Logout</button>
+    </nav>
+
+    <header class="site-header compact">
+      <div class="site-header-row">
+        <div>
+          <p class="eyebrow">Job Finder</p>
+          <h1>Stored Job Database</h1>
+          <p>Browse every job saved by the scraper with source and search filters.</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="stored-layout">
+      <section class="panel">
+        <form id="stored-jobs-filter" class="stored-toolbar">
+          <div class="field-group">
+            <label for="query">Search</label>
+            <input id="query" type="text" placeholder="Title, company, location, skill..." />
+          </div>
+          <div class="field-group">
+            <label for="source">Source</label>
+            <select id="source">
+              <option value="">All Sources</option>
+              <option value="indeed">Indeed</option>
+              <option value="stepstone">StepStone</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="arbeitnow">Arbeitnow</option>
+              <option value="berlinstartupjobs">BerlinStartupJobs</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="limit">Page Size</label>
+            <select id="limit">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="200">200</option>
+            </select>
+          </div>
+          <button type="submit">Load Jobs</button>
+        </form>
+        <div class="results-toolbar">
+          <div id="stored-meta" class="meta"></div>
+          <div class="stored-actions">
+            <button id="load-more" class="quiet-btn" type="button">Load More</button>
+            <button id="clear-stored-jobs" class="danger-btn" type="button">Clear My Stored Jobs</button>
+          </div>
+        </div>
+        <div id="stored-grid" class="stored-grid"></div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <script type="module" src="/js/storedJobs.js"></script>
+  </body>
+</html>
