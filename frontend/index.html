@@ -82,7 +82,7 @@
             <label for="salary-min">Minimum Salary (€)</label>
             <input id="salary-min" type="number" min="0" step="1000" />
           </div>
-          <div class="field-group">
+          <div class="field-group field-wide">
             <label>Sources</label>
             <div class="inline-checks">
               <label><input type="checkbox" name="source" value="indeed" checked /> Indeed</label>
@@ -92,14 +92,16 @@
               <label><input type="checkbox" name="source" value="berlinstartupjobs" checked /> BerlinStartupJobs</label>
             </div>
           </div>
-          <div class="field-group">
+          <div class="field-group field-wide">
             <label>Result Mode</label>
             <div class="segment-control" role="radiogroup" aria-label="Result mode">
               <label><input type="radio" name="result-mode" value="session" checked /> Accumulate Session</label>
               <label><input type="radio" name="result-mode" value="latest" /> Latest Search Only</label>
             </div>
           </div>
-          <button id="search-submit-btn" type="submit">Search Jobs</button>
+          <div class="form-actions">
+            <button id="search-submit-btn" type="submit">Search Jobs</button>
+          </div>
         </form>
         <div class="results-toolbar">
           <div id="search-meta" class="meta" aria-live="polite"></div>
