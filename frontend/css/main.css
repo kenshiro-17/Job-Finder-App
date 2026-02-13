@@ -247,12 +247,18 @@ a {
   gap: 1.08rem;
 }
 
+.layout > *,
+.stored-layout > * {
+  min-width: 0;
+}
+
 .panel {
   background: linear-gradient(165deg, #ffffff 0%, #fbfdff 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: 1.3rem;
+  min-width: 0;
 }
 
 .panel h2 {
@@ -369,6 +375,10 @@ button:disabled {
   grid-template-columns: 1fr;
   align-items: center;
   margin-bottom: 0.86rem;
+}
+
+#resume-upload-form input[type="file"] {
+  max-width: 100%;
 }
 
 .grid-form {
@@ -658,10 +668,6 @@ menu button[value="cancel"],
 }
 
 @media (min-width: 720px) {
-  #resume-upload-form {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .field-wide {
     grid-column: span 2;
   }
@@ -683,8 +689,6 @@ menu button[value="cancel"],
   }
 
   #resume-panel {
-    position: sticky;
-    top: 3.6rem;
     align-self: start;
   }
 

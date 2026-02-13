@@ -19,6 +19,7 @@ Upload your resume, search across multiple job sources, rank jobs by fit, track 
 - Stored jobs page with filtering, pagination, single delete, and clear-all
 - Application tracker with lane drag-and-drop, bulk delete, and clear-all
 - Cover letter generation and save support
+- Responsive layout improvements with overlap-safe panels and no horizontal page overflow
 - Recency controls:
   - Jobs older than 21 days are excluded
   - Freshly scraped jobs are prioritized
