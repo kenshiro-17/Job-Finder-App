@@ -8,9 +8,14 @@ from pydantic import BaseModel, Field
 class SearchFilter(BaseModel):
     job_type: list[str] | None = None
     remote: list[str] | None = None
+    work_mode: list[str] | None = None
     salary_min: int | None = None
     experience_level: list[str] | None = None
     date_posted: str | None = None
+    location_contains: str | None = None
+    match_percentage_min: int | None = Field(default=None, ge=0, le=100)
+    match_percentage_max: int | None = Field(default=None, ge=0, le=100)
+    relevancy: list[str] | None = None
 
 
 class JobSearchRequest(BaseModel):
@@ -32,6 +37,7 @@ class JobOut(BaseModel):
     salary_max: int | None = None
     job_type: str | None = None
     remote_type: str | None = None
+    experience_level: str | None = None
     description: str | None = None
     requirements: str | None = None
     url: str

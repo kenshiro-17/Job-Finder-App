@@ -109,6 +109,26 @@
   min-height: 5.9rem;
 }
 
+.job-card .job-taxonomy {
+  margin: 0.3rem 0 0.15rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+}
+
+.job-card .job-taxonomy span {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #ccdae8;
+  border-radius: var(--radius-pill);
+  background: #eff5fb;
+  color: #2a3b50;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 0.18rem 0.5rem;
+}
+
 .job-card .score {
   margin: 0.5rem 0 0.44rem;
   font-size: 0.96rem;

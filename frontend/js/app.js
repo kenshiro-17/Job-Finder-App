@@ -17,7 +17,7 @@ import { renderJobResults } from "./components/jobSearch.js";
 import { initKanban, renderApplications } from "./components/kanbanBoard.js";
 import { renderResumes } from "./components/resumeUpload.js";
 import { ensureAuthenticated, wireLogout } from "./authSession.js";
-import { selectedSources, showToast } from "./utils.js";
+import { selectedSources, selectedValuesByName, showToast } from "./utils.js";
 
 const state = {
   resumes: [],
@@ -116,15 +116,41 @@ searchForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const resumeId = Number(activeResumeSelect.value);
   const resultMode = getResultMode();
+  const matchMinInput = document.getElementById("match-min").value.trim();
+  const matchMaxInput = document.getElementById("match-max").value.trim();
+  const matchMinRaw = matchMinInput === "" ? Number.NaN : Number(matchMinInput);
+  const matchMaxRaw = matchMaxInput === "" ? Number.NaN : Number(matchMaxInput);
+  const matchMin = Number.isFinite(matchMinRaw) && matchMinRaw >= 0 ? Math.min(100, Math.max(0, matchMinRaw)) : null;
+  const matchMax = Number.isFinite(matchMaxRaw) && matchMaxRaw >= 0 ? Math.min(100, Math.max(0, matchMaxRaw)) : null;
+  const relevancy = selectedValuesByName("relevancy");
+  const workMode = selectedValuesByName("work-mode");
+  const experienceLevel = selectedValuesByName("experience-level");
   const payload = {
     keywords: document.getElementById("keywords").value,
     location: document.getElementById("location").value,
     resume_id: resumeId || null,
     filters: {
       salary_min: Number(document.getElementById("salary-min").value) || null,
+      location_contains: document.getElementById("filter-location").value.trim() || null,
+      match_percentage_min: matchMin,
+      match_percentage_max: matchMax,
+      date_posted: document.getElementById("date-posted").value || null,
+      experience_level: experienceLevel,
+      remote: workMode,
+      work_mode: workMode,
+      relevancy,
     },
     sources: selectedSources(),
   };
+
+  if ((matchMin !== null || matchMax !== null || relevancy.length > 0) && !payload.resume_id) {
+    showToast("Select an active resume to use match/relevancy filters.");
+    return;
+  }
+  if (matchMin !== null && matchMax !== null && matchMin > matchMax) {
+    payload.filters.match_percentage_min = matchMax;
+    payload.filters.match_percentage_max = matchMin;
+  }
   if (!payload.sources.length) {
     showToast("Select at least one source.");
     return;
@@ -141,7 +167,7 @@ searchForm.addEventListener("submit", async (event) => {
     setSearchLoading(true);
     searchMeta.textContent = "Searching...";
     const result = await searchJobs(payload);
-    if (result.jobs.length === 0 && state.lastJobs.length > 0) {
+    if (result.jobs.length === 0 && state.lastJobs.length > 0 && resultMode === "session") {
       const fallbackCount = resultMode === "latest" ? state.latestJobs.length : state.lastJobs.length;
       searchMeta.textContent = `No fresh jobs found. Keeping ${fallbackCount} jobs in current view.`;
       showToast("No new jobs found; kept previous results.");
@@ -158,8 +184,8 @@ searchForm.addEventListener("submit", async (event) => {
     const visible = getCurrentResultSet();
     searchMeta.textContent =
       resultMode === "latest"
-        ? `${visible.length} jobs in latest search${result.cached ? " (cached)" : ""}.`
-        : `${result.jobs.length} jobs from latest search, ${state.lastJobs.length} total in session${result.cached ? " (cached)" : ""}.`;
+        ? `${visible.length} filtered jobs in latest search${result.cached ? " (cached)" : ""}.`
+        : `${result.jobs.length} filtered jobs from latest search, ${state.lastJobs.length} total in session${result.cached ? " (cached)" : ""}.`;
     renderSourceBreakdown(visible);
     updateStats(visible, state.lastScores, state.applications);
     renderJobResults({

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import parse_qs, quote, urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,7 +18,7 @@ from app.models.resume import Resume
 from app.models.search_cache import SearchCache
 from app.models.user import User
 from app.models.user_job import UserJob
-from app.schemas.job import JobOut, JobSearchRequest, JobSearchResponse, StoredJobsResponse
+from app.schemas.job import JobOut, JobSearchRequest, JobSearchResponse, SearchFilter, StoredJobsResponse
 from app.services.job_scraper import JobScraper
 from app.services.matcher import JobMatcher
 from app.services.search_cache import SearchCacheService
@@ -247,6 +247,175 @@ def _recent_sort_key(job: Job) -> tuple:
     return (1 if _is_newest_window(job) else 0, posted_rank, scraped_rank, job.id or 0)
 
 
+def _normalize_experience_level(value: str) -> str:
+    token = value.lower().strip()
+    if any(part in token for part in ("intern", "internship", "praktikum", "graduate", "entry level", "entry-level", "trainee")):
+        return "entry"
+    if any(part in token for part in ("junior", " jr", "jr ")):
+        return "junior"
+    if any(part in token for part in ("lead", "principal", "head of", "staff")):
+        return "lead"
+    if "senior" in token or " sr" in token or "sr " in token:
+        return "senior"
+    if any(part in token for part in ("mid", "intermediate", "experienced", "professional")):
+        return "mid"
+    return ""
+
+
+def _infer_experience_level(job: Job) -> str:
+    existing = _normalize_experience_level(str(getattr(job, "experience_level", "") or ""))
+    if existing:
+        return existing
+    haystack = " ".join(
+        str(value or "")
+        for value in (job.title, job.description, job.requirements)
+    )
+    inferred = _normalize_experience_level(haystack)
+    return inferred or "mid"
+
+
+def _normalize_work_mode(value: str) -> str:
+    token = value.lower().replace("_", " ").replace("-", " ").strip()
+    if "hybrid" in token:
+        return "hybrid"
+    if any(part in token for part in ("remote", "home office", "work from home", "wfh", "distributed")):
+        return "remote"
+    if any(part in token for part in ("on site", "onsite", "office", "vor ort")):
+        return "onsite"
+    return ""
+
+
+def _infer_work_mode(job: Job) -> str:
+    existing = _normalize_work_mode(str(job.remote_type or ""))
+    if existing:
+        return existing
+    haystack = " ".join(
+        str(value or "")
+        for value in (job.title, job.location, job.description, job.requirements)
+    )
+    inferred = _normalize_work_mode(haystack)
+    return inferred or "onsite"
+
+
+def _job_reference_date(job: Job) -> date | None:
+    if job.posted_date:
+        return job.posted_date
+    if job.scraped_at:
+        return job.scraped_at.date()
+    return None
+
+
+def _passes_date_posted_filter(job: Job, date_posted_filter: str | None) -> bool:
+    value = (date_posted_filter or "").strip().lower()
+    if not value:
+        return True
+    now = datetime.utcnow()
+    hour_windows = {
+        "last_1h": 1,
+        "last_4h": 4,
+        "last_8h": 8,
+    }
+    hours = hour_windows.get(value)
+    if hours is not None:
+        if job.scraped_at:
+            return job.scraped_at >= (now - timedelta(hours=hours))
+        if job.posted_date:
+            return job.posted_date >= now.date()
+        return True
+    windows = {
+        "last_24h": 1,
+        "last_3_days": 3,
+        "last_7_days": 7,
+        "last_14_days": 14,
+        "last_21_days": 21,
+        "last_30_days": 30,
+    }
+    days = windows.get(value)
+    if not days:
+        return True
+    ref_date = _job_reference_date(job)
+    if not ref_date:
+        return True
+    return ref_date >= (now.date() - timedelta(days=days))
+
+
+def _extract_score(job: Job, match_scores: dict[str, dict]) -> float | None:
+    row = match_scores.get(str(job.id))
+    if row and isinstance(row.get("score"), (int, float)):
+        return float(row["score"])
+    if isinstance(job.match_score, (int, float)):
+        return float(job.match_score)
+    return None
+
+
+def _relevancy_bucket(score: float) -> str:
+    if score >= 0.7:
+        return "strong"
+    if score >= 0.5:
+        return "good"
+    return "possible"
+
+
+def _apply_advanced_filters(
+    jobs: list[Job],
+    filters: SearchFilter,
+    match_scores: dict[str, dict],
+) -> list[Job]:
+    if not jobs:
+        return []
+
+    work_modes = {
+        _normalize_work_mode(str(mode))
+        for mode in ((filters.remote or []) + (getattr(filters, "work_mode", None) or []))
+    }
+    work_modes = {mode for mode in work_modes if mode}
+    experience_levels = {_normalize_experience_level(str(level)) for level in (filters.experience_level or [])}
+    experience_levels = {level for level in experience_levels if level}
+    relevancy_levels = {str(level).strip().lower() for level in (filters.relevancy or []) if str(level).strip()}
+
+    min_pct = filters.match_percentage_min
+    max_pct = filters.match_percentage_max
+    if min_pct is not None and max_pct is not None and min_pct > max_pct:
+        min_pct, max_pct = max_pct, min_pct
+
+    location_contains = (filters.location_contains or "").strip().lower()
+    salary_min = filters.salary_min
+
+    filtered: list[Job] = []
+    for job in jobs:
+        if salary_min and job.salary_min and job.salary_min < salary_min:
+            continue
+        if location_contains and location_contains not in str(job.location or "").lower():
+            continue
+        if work_modes and _infer_work_mode(job) not in work_modes:
+            continue
+        if experience_levels and _infer_experience_level(job) not in experience_levels:
+            continue
+        if not _passes_date_posted_filter(job, filters.date_posted):
+            continue
+
+        score = _extract_score(job, match_scores)
+        if min_pct is not None or max_pct is not None or relevancy_levels:
+            if score is None:
+                continue
+            pct = score * 100
+            if min_pct is not None and pct < min_pct:
+                continue
+            if max_pct is not None and pct > max_pct:
+                continue
+            if relevancy_levels and _relevancy_bucket(score) not in relevancy_levels:
+                continue
+        filtered.append(job)
+
+    return filtered
+
+
+def _csv_values(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
 def _cleanup_orphan_jobs(db: Session, candidate_job_ids: list[int] | None = None) -> int:
     query = db.query(Job.id).filter(~exists().where(UserJob.job_id == Job.id)).filter(~exists().where(Application.job_id == Job.id))
     if candidate_job_ids:
@@ -424,6 +593,11 @@ async def search_jobs(
 
         db.commit()
 
+    jobs = _apply_advanced_filters(jobs, payload.filters, match_scores)
+    if match_scores:
+        allowed_ids = {str(job.id) for job in jobs}
+        match_scores = {job_id: details for job_id, details in match_scores.items() if job_id in allowed_ids}
+
     sorted_jobs = sorted(jobs, key=_recent_sort_key, reverse=True)
     changed = False
     for job in sorted_jobs:
@@ -458,6 +632,13 @@ def list_jobs(
     offset: int = Query(default=0, ge=0),
     source: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    location_contains: str | None = Query(default=None),
+    date_posted: str | None = Query(default=None),
+    experience_level: str | None = Query(default=None),
+    work_mode: str | None = Query(default=None),
+    match_percentage_min: int | None = Query(default=None, ge=0, le=100),
+    match_percentage_max: int | None = Query(default=None, ge=0, le=100),
+    relevancy: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StoredJobsResponse:
@@ -475,14 +656,47 @@ def list_jobs(
                 Job.requirements.ilike(term),
             )
         )
+    if location_contains:
+        query = query.filter(Job.location.ilike(f"%{location_contains.strip()}%"))
 
-    total = query.count()
-    jobs = (
+    ordered_jobs = (
         query.order_by(UserJob.last_seen_at.desc(), UserJob.sort_rank.asc(), Job.id.desc())
-        .offset(offset)
-        .limit(limit)
         .all()
     )
+    work_modes = {_normalize_work_mode(part) for part in _csv_values(work_mode)}
+    work_modes = {mode for mode in work_modes if mode}
+    experience_levels = {_normalize_experience_level(part) for part in _csv_values(experience_level)}
+    experience_levels = {level for level in experience_levels if level}
+    relevancy_levels = {part.lower() for part in _csv_values(relevancy)}
+
+    min_pct = match_percentage_min
+    max_pct = match_percentage_max
+    if min_pct is not None and max_pct is not None and min_pct > max_pct:
+        min_pct, max_pct = max_pct, min_pct
+
+    filtered_jobs: list[Job] = []
+    for job in ordered_jobs:
+        if work_modes and _infer_work_mode(job) not in work_modes:
+            continue
+        if experience_levels and _infer_experience_level(job) not in experience_levels:
+            continue
+        if not _passes_date_posted_filter(job, date_posted):
+            continue
+        score = job.match_score if isinstance(job.match_score, (int, float)) else None
+        if min_pct is not None or max_pct is not None or relevancy_levels:
+            if score is None:
+                continue
+            pct = float(score) * 100
+            if min_pct is not None and pct < min_pct:
+                continue
+            if max_pct is not None and pct > max_pct:
+                continue
+            if relevancy_levels and _relevancy_bucket(float(score)) not in relevancy_levels:
+                continue
+        filtered_jobs.append(job)
+
+    total = len(filtered_jobs)
+    jobs = filtered_jobs[offset: offset + limit]
     changed = False
     for job in jobs:
         canonical = _canonical_job_url(

@@ -1,11 +1,15 @@
 import { clearStoredJobs, deleteStoredJob, fetchStoredJobs } from "./api.js";
 import { ensureAuthenticated, wireLogout } from "./authSession.js";
-import { showToast } from "./utils.js";
+import { selectedValuesByName, showToast } from "./utils.js";
 
 const filterForm = document.getElementById("stored-jobs-filter");
 const queryInput = document.getElementById("query");
+const storedLocationInput = document.getElementById("stored-location");
 const sourceSelect = document.getElementById("source");
 const limitSelect = document.getElementById("limit");
+const storedDatePostedSelect = document.getElementById("stored-date-posted");
+const storedMatchMinInput = document.getElementById("stored-match-min");
+const storedMatchMaxInput = document.getElementById("stored-match-max");
 const loadMoreBtn = document.getElementById("load-more");
 const clearStoredBtn = document.getElementById("clear-stored-jobs");
 const meta = document.getElementById("stored-meta");
@@ -70,9 +74,33 @@ grid.addEventListener("click", async (event) => {
 
 async function loadJobs(append) {
   try {
+    const experienceLevel = selectedValuesByName("stored-experience-level");
+    const workMode = selectedValuesByName("stored-work-mode");
+    const relevancy = selectedValuesByName("stored-relevancy");
+    const matchMinInput = storedMatchMinInput.value.trim();
+    const matchMaxInput = storedMatchMaxInput.value.trim();
+    let matchMin = matchMinInput === "" ? null : Number(matchMinInput);
+    let matchMax = matchMaxInput === "" ? null : Number(matchMaxInput);
+    if (!Number.isFinite(matchMin)) matchMin = null;
+    if (!Number.isFinite(matchMax)) matchMax = null;
+    if (matchMin !== null) matchMin = Math.min(100, Math.max(0, matchMin));
+    if (matchMax !== null) matchMax = Math.min(100, Math.max(0, matchMax));
+    if (matchMin !== null && matchMax !== null && matchMin > matchMax) {
+      const swap = matchMin;
+      matchMin = matchMax;
+      matchMax = swap;
+    }
+
     const response = await fetchStoredJobs({
       q: queryInput.value.trim() || undefined,
+      location_contains: storedLocationInput.value.trim() || undefined,
       source: sourceSelect.value || undefined,
+      date_posted: storedDatePostedSelect.value || undefined,
+      experience_level: experienceLevel.length ? experienceLevel.join(",") : undefined,
+      work_mode: workMode.length ? workMode.join(",") : undefined,
+      relevancy: relevancy.length ? relevancy.join(",") : undefined,
+      match_percentage_min: matchMin ?? undefined,
+      match_percentage_max: matchMax ?? undefined,
       limit: state.limit,
       offset: state.offset,
     });

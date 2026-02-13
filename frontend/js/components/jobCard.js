@@ -2,6 +2,9 @@ export function createJobCard({ job, score, onTrack, onCoverLetter, onDelete }) 
   const link = resolveJobLink(job);
   const scorePct = score !== null ? Math.round(score * 100) : null;
   const posted = formatPostedDate(job.posted_date, job.scraped_at);
+  const workMode = formatWorkMode(job.remote_type);
+  const experience = formatExperienceLevel(job.experience_level, job.title, job.description, job.requirements);
+  const relevancy = scorePct !== null ? classifyRelevancy(scorePct) : "Unscored";
   const card = document.createElement("article");
   card.className = "job-card";
   card.innerHTML = `
@@ -12,8 +15,13 @@ export function createJobCard({ job, score, onTrack, onCoverLetter, onDelete }) 
     <h3>${escapeHtml(job.title || "Untitled role")}</h3>
     <p class="company">${escapeHtml(job.company || "Unknown company")}</p>
     <p class="location"><span>${escapeHtml(job.location || "Unknown location")}</span><span>${escapeHtml(posted)}</span></p>
+    <div class="job-taxonomy">
+      <span>${escapeHtml(workMode)}</span>
+      <span>${escapeHtml(experience)}</span>
+      <span>${escapeHtml(job.job_type || "full-time")}</span>
+    </div>
     <p class="desc">${escapeHtml((job.description || "No description available from source.").slice(0, 240))}${job.description ? "..." : ""}</p>
-    <p class="score">Match Score: ${scorePct !== null ? `${scorePct}%` : "N/A"}</p>
+    <p class="score">Match Score: ${scorePct !== null ? `${scorePct}%` : "N/A"} · ${escapeHtml(relevancy)}</p>
     <div class="score-meter"><div class="score-fill" style="width:${scorePct !== null ? scorePct : 0}%"></div></div>
     <a class="job-link" href="${link}" target="_blank" rel="noopener">Open job posting ↗</a>
     <div class="actions">
@@ -102,6 +110,33 @@ function formatPostedDate(postedDate, scrapedAt) {
   }
   if (!postedDate) return "Posted recently";
   return `Posted ${postedDate}`;
+}
+
+function formatWorkMode(mode) {
+  const normalized = String(mode || "").toLowerCase();
+  if (normalized.includes("remote")) return "Remote";
+  if (normalized.includes("hybrid")) return "Hybrid";
+  if (normalized.includes("onsite") || normalized.includes("on-site")) return "Onsite";
+  return "Onsite";
+}
+
+function formatExperienceLevel(level, title, description, requirements) {
+  const normalized = String(level || "").toLowerCase().trim();
+  if (normalized) {
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+  const haystack = `${title || ""} ${description || ""} ${requirements || ""}`.toLowerCase();
+  if (/(intern|graduate|entry|trainee|praktikum)/.test(haystack)) return "Entry";
+  if (/(junior|\bjr\b)/.test(haystack)) return "Junior";
+  if (/(lead|principal|staff|head of)/.test(haystack)) return "Lead";
+  if (/(senior|\bsr\b)/.test(haystack)) return "Senior";
+  return "Mid";
+}
+
+function classifyRelevancy(scorePct) {
+  if (scorePct >= 70) return "Strong Relevancy";
+  if (scorePct >= 50) return "Good Relevancy";
+  return "Possible Relevancy";
 }
 
 function escapeHtml(value) {

@@ -626,6 +626,7 @@ class JobScraper:
         seen: set[str] = set()
         deduplicated: list[dict[str, Any]] = []
         for job in jobs:
+            job = self._finalize_job_payload(job)
             key = (
                 f"{job.get('title', '').lower()}::"
                 f"{job.get('company', '').lower()}::"
@@ -764,21 +765,135 @@ class JobScraper:
         }
 
     def _matches_filters(self, job: dict[str, Any], filters: dict[str, Any]) -> bool:
+        self._finalize_job_payload(job)
+
         posted_date = job.get("posted_date")
         if posted_date and isinstance(posted_date, date):
             oldest_allowed = date.today() - timedelta(days=settings.max_job_age_days)
             if posted_date < oldest_allowed:
                 return False
 
+        date_posted_filter = str(filters.get("date_posted") or "").strip().lower()
+        if date_posted_filter and not self._passes_date_filter(posted_date, date_posted_filter):
+            return False
+
         salary_min = filters.get("salary_min")
         if salary_min and job.get("salary_min") and job["salary_min"] < salary_min:
             return False
 
-        remote_values = filters.get("remote") or []
-        if remote_values and job.get("remote_type") and job["remote_type"] not in remote_values:
+        location_contains = str(filters.get("location_contains") or "").strip().lower()
+        if location_contains:
+            job_location = str(job.get("location") or "").lower()
+            if location_contains not in job_location:
+                return False
+
+        remote_values = [str(v).strip().lower() for v in ((filters.get("remote") or []) + (filters.get("work_mode") or [])) if str(v).strip()]
+        if remote_values and (job.get("remote_type") or "").lower() not in remote_values:
+            return False
+
+        experience_values = [str(v).strip().lower() for v in (filters.get("experience_level") or []) if str(v).strip()]
+        if experience_values and (job.get("experience_level") or "").lower() not in experience_values:
             return False
 
         return True
+
+    def _finalize_job_payload(self, job: dict[str, Any]) -> dict[str, Any]:
+        remote_type = self._infer_remote_type(job)
+        if remote_type:
+            job["remote_type"] = remote_type
+        experience_level = self._infer_experience_level(job)
+        if experience_level:
+            job["experience_level"] = experience_level
+        job_type = self._infer_job_type(job)
+        if job_type:
+            job["job_type"] = job_type
+        return job
+
+    def _normalize_remote_mode(self, value: str) -> str:
+        token = value.lower().replace("_", " ").replace("-", " ").strip()
+        if any(part in token for part in ("hybrid", "hybrid working")):
+            return "hybrid"
+        if any(part in token for part in ("remote", "home office", "work from home", "wfh", "fully distributed", "distributed")):
+            return "remote"
+        if any(part in token for part in ("on site", "onsite", "office", "vor ort", "onprem")):
+            return "onsite"
+        return ""
+
+    def _infer_remote_type(self, job: dict[str, Any]) -> str:
+        existing = str(job.get("remote_type") or "").strip()
+        normalized_existing = self._normalize_remote_mode(existing)
+        if normalized_existing:
+            return normalized_existing
+        haystack = " ".join(
+            str(job.get(part) or "")
+            for part in ("title", "location", "description", "requirements")
+        ).lower()
+        return self._normalize_remote_mode(haystack) or "onsite"
+
+    def _normalize_experience_level(self, value: str) -> str:
+        token = value.lower().strip()
+        if any(part in token for part in ("intern", "internship", "praktikum", "graduate", "entry level", "entry-level", "trainee")):
+            return "entry"
+        if any(part in token for part in ("junior", "jr")):
+            return "junior"
+        if any(part in token for part in ("senior", "sr", "staff", "principal", "lead", "head of", "team lead")):
+            if any(part in token for part in ("lead", "principal", "head of", "staff")):
+                return "lead"
+            return "senior"
+        if any(part in token for part in ("mid", "intermediate", "experienced", "professional")):
+            return "mid"
+        return ""
+
+    def _infer_experience_level(self, job: dict[str, Any]) -> str:
+        existing = str(job.get("experience_level") or "").strip()
+        normalized_existing = self._normalize_experience_level(existing)
+        if normalized_existing:
+            return normalized_existing
+        haystack = " ".join(
+            str(job.get(part) or "")
+            for part in ("title", "description", "requirements")
+        )
+        inferred = self._normalize_experience_level(haystack)
+        if inferred:
+            return inferred
+        return "mid"
+
+    def _infer_job_type(self, job: dict[str, Any]) -> str:
+        existing = str(job.get("job_type") or "").strip().lower()
+        if existing:
+            return existing
+        haystack = " ".join(
+            str(job.get(part) or "")
+            for part in ("title", "description", "requirements")
+        ).lower()
+        if any(token in haystack for token in ("part-time", "part time", "teilzeit")):
+            return "part-time"
+        if any(token in haystack for token in ("contract", "contractor", "freelance", "befristet")):
+            return "contract"
+        if any(token in haystack for token in ("intern", "internship", "praktikum", "trainee")):
+            return "internship"
+        return "full-time"
+
+    def _passes_date_filter(self, posted_date: date | None, date_posted_filter: str) -> bool:
+        if not date_posted_filter:
+            return True
+        if date_posted_filter in {"last_1h", "last_4h", "last_8h"}:
+            # Source pages often expose only day-level recency; treat same-day postings as eligible.
+            return posted_date is None or posted_date >= date.today()
+        window_map = {
+            "last_24h": 1,
+            "last_3_days": 3,
+            "last_7_days": 7,
+            "last_14_days": 14,
+            "last_21_days": 21,
+            "last_30_days": 30,
+        }
+        days = window_map.get(date_posted_filter)
+        if not days:
+            return True
+        if not posted_date:
+            return True
+        return posted_date >= (date.today() - timedelta(days=days))
 
     def _parse_relative_date(self, value: str | None) -> date | None:
         if not value:

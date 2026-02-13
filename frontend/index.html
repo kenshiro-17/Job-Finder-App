@@ -68,7 +68,7 @@
 
       <section class="panel" id="search-panel">
         <h2>Job Search</h2>
-        <p class="panel-subtitle">Run cross-source search and keep either the latest result or an accumulating session set.</p>
+        <p class="panel-subtitle">Run cross-source search, apply precision filters, and keep either the latest result or an accumulating session set.</p>
         <form id="job-search-form" class="grid-form">
           <div class="field-group">
             <label for="keywords">Keywords</label>
@@ -82,6 +82,68 @@
             <label for="salary-min">Minimum Salary (€)</label>
             <input id="salary-min" type="number" min="0" step="1000" />
           </div>
+          <section class="filter-block field-wide" aria-label="Advanced search filters">
+            <div class="filter-block-head">
+              <h3>Advanced Filters</h3>
+              <p>Refine by location precision, match quality, recency, experience, and work mode.</p>
+            </div>
+            <div class="filter-grid">
+              <div class="field-group">
+                <label for="filter-location">Location Contains</label>
+                <input id="filter-location" type="text" placeholder="Berlin" />
+              </div>
+              <div class="field-group">
+                <label for="match-min">Match Min (%)</label>
+                <input id="match-min" type="number" min="0" max="100" step="1" placeholder="50" />
+              </div>
+              <div class="field-group">
+                <label for="match-max">Match Max (%)</label>
+                <input id="match-max" type="number" min="0" max="100" step="1" placeholder="100" />
+              </div>
+              <div class="field-group">
+                <label for="date-posted">Date Posted</label>
+                <select id="date-posted">
+                  <option value="">Any recent (max 21 days)</option>
+                  <option value="last_1h">Last 1 hour</option>
+                  <option value="last_4h">Last 4 hours</option>
+                  <option value="last_8h">Last 8 hours</option>
+                  <option value="last_24h">Last 24 hours</option>
+                  <option value="last_3_days">Last 3 days</option>
+                  <option value="last_7_days">Last 7 days</option>
+                  <option value="last_14_days">Last 14 days</option>
+                  <option value="last_21_days">Last 21 days</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-grid filter-grid-choices">
+              <div class="field-group">
+                <label>Experience Level</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="experience-level" value="entry" /> Entry</label>
+                  <label><input type="checkbox" name="experience-level" value="junior" /> Junior</label>
+                  <label><input type="checkbox" name="experience-level" value="mid" /> Mid</label>
+                  <label><input type="checkbox" name="experience-level" value="senior" /> Senior</label>
+                  <label><input type="checkbox" name="experience-level" value="lead" /> Lead</label>
+                </div>
+              </div>
+              <div class="field-group">
+                <label>Work Mode</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="work-mode" value="onsite" /> Onsite</label>
+                  <label><input type="checkbox" name="work-mode" value="hybrid" /> Hybrid</label>
+                  <label><input type="checkbox" name="work-mode" value="remote" /> Remote</label>
+                </div>
+              </div>
+              <div class="field-group">
+                <label>Resume Relevancy</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="relevancy" value="strong" /> Strong (70%+)</label>
+                  <label><input type="checkbox" name="relevancy" value="good" /> Good (50-69%)</label>
+                  <label><input type="checkbox" name="relevancy" value="possible" /> Possible (&lt;50%)</label>
+                </div>
+              </div>
+            </div>
+          </section>
           <div class="field-group field-wide">
             <label>Sources</label>
             <div class="inline-checks">

@@ -394,8 +394,43 @@ button:disabled {
   height: 100%;
 }
 
+.filter-block {
+  border: 1px solid #d5e0eb;
+  border-radius: 14px;
+  background: linear-gradient(165deg, #fbfdff 0%, #f1f7fc 100%);
+  padding: 0.86rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.filter-block-head h3 {
+  margin: 0;
+  font-size: 1.03rem;
+  letter-spacing: -0.01em;
+}
+
+.filter-block-head p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.filter-grid {
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.filter-grid-choices {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .field-wide {
   grid-column: span 1;
+}
+
+.stored-toolbar .field-wide {
+  grid-column: 1 / -1;
 }
 
 .stored-toolbar {
@@ -438,6 +473,16 @@ button:disabled {
   border-radius: var(--radius-pill);
   background: var(--panel-soft);
   padding: 0.5rem 0.84rem;
+}
+
+.compact-checks {
+  min-height: auto;
+  gap: 0.42rem;
+}
+
+.compact-checks label {
+  padding: 0.4rem 0.66rem;
+  font-size: 0.85rem;
 }
 
 .segment-control {

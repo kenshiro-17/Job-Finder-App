@@ -8,3 +8,7 @@ export function showToast(message) {
 export function selectedSources() {
   return Array.from(document.querySelectorAll('input[name="source"]:checked')).map((node) => node.value);
 }
+
+export function selectedValuesByName(name) {
+  return Array.from(document.querySelectorAll(`input[name="${name}"]:checked`)).map((node) => node.value);
+}

@@ -25,6 +25,7 @@ def run_runtime_migrations(engine: Engine) -> None:
         _add_column_if_missing(conn, "search_cache", "user_id", "user_id INTEGER")
         _add_column_if_missing(conn, "user_jobs", "sort_rank", "sort_rank INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "user_jobs", "last_seen_at", "last_seen_at DATETIME")
+        _add_column_if_missing(conn, "jobs", "experience_level", "experience_level VARCHAR(50)")
 
         owner_username = settings.default_owner_username.strip().lower()
         owner_password = settings.default_owner_password

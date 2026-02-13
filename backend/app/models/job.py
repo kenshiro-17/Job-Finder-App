@@ -24,6 +24,7 @@ class Job(Base):
     salary_max = Column(Integer)
     job_type = Column(String(50))
     remote_type = Column(String(50))
+    experience_level = Column(String(50))
     description = Column(Text)
     requirements = Column(Text)
     url = Column(String(1000), nullable=False)

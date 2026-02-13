@@ -34,6 +34,10 @@
             <input id="query" type="text" placeholder="Title, company, location, skill..." />
           </div>
           <div class="field-group">
+            <label for="stored-location">Location Contains</label>
+            <input id="stored-location" type="text" placeholder="Berlin" />
+          </div>
+          <div class="field-group">
             <label for="source">Source</label>
             <select id="source">
               <option value="">All Sources</option>
@@ -52,6 +56,64 @@
               <option value="200">200</option>
             </select>
           </div>
+          <section class="filter-block field-wide" aria-label="Stored jobs advanced filters">
+            <div class="filter-block-head">
+              <h3>Advanced Filters</h3>
+              <p>Filter your stored jobs by recency, work mode, level, and relevance.</p>
+            </div>
+            <div class="filter-grid">
+              <div class="field-group">
+                <label for="stored-match-min">Match Min (%)</label>
+                <input id="stored-match-min" type="number" min="0" max="100" step="1" placeholder="50" />
+              </div>
+              <div class="field-group">
+                <label for="stored-match-max">Match Max (%)</label>
+                <input id="stored-match-max" type="number" min="0" max="100" step="1" placeholder="100" />
+              </div>
+              <div class="field-group">
+                <label for="stored-date-posted">Date Posted</label>
+                <select id="stored-date-posted">
+                  <option value="">Any recent (max 21 days)</option>
+                  <option value="last_1h">Last 1 hour</option>
+                  <option value="last_4h">Last 4 hours</option>
+                  <option value="last_8h">Last 8 hours</option>
+                  <option value="last_24h">Last 24 hours</option>
+                  <option value="last_3_days">Last 3 days</option>
+                  <option value="last_7_days">Last 7 days</option>
+                  <option value="last_14_days">Last 14 days</option>
+                  <option value="last_21_days">Last 21 days</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-grid filter-grid-choices">
+              <div class="field-group">
+                <label>Experience Level</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="stored-experience-level" value="entry" /> Entry</label>
+                  <label><input type="checkbox" name="stored-experience-level" value="junior" /> Junior</label>
+                  <label><input type="checkbox" name="stored-experience-level" value="mid" /> Mid</label>
+                  <label><input type="checkbox" name="stored-experience-level" value="senior" /> Senior</label>
+                  <label><input type="checkbox" name="stored-experience-level" value="lead" /> Lead</label>
+                </div>
+              </div>
+              <div class="field-group">
+                <label>Work Mode</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="stored-work-mode" value="onsite" /> Onsite</label>
+                  <label><input type="checkbox" name="stored-work-mode" value="hybrid" /> Hybrid</label>
+                  <label><input type="checkbox" name="stored-work-mode" value="remote" /> Remote</label>
+                </div>
+              </div>
+              <div class="field-group">
+                <label>Resume Relevancy</label>
+                <div class="inline-checks compact-checks">
+                  <label><input type="checkbox" name="stored-relevancy" value="strong" /> Strong (70%+)</label>
+                  <label><input type="checkbox" name="stored-relevancy" value="good" /> Good (50-69%)</label>
+                  <label><input type="checkbox" name="stored-relevancy" value="possible" /> Possible (&lt;50%)</label>
+                </div>
+              </div>
+            </div>
+          </section>
           <div class="form-actions">
             <button type="submit">Load Jobs</button>
           </div>
