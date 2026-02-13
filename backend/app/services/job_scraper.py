@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import html
 import random
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import parse_qs, quote_plus, urljoin, urlparse
 
@@ -44,17 +45,18 @@ class JobScraper:
         self.parser = ResumeParser(load_nlp=False)
 
     async def search(self, keywords: str, location: str, filters: dict[str, Any], sources: list[str]) -> list[dict[str, Any]]:
-        tasks = []
+        tasks: list[asyncio.Future | asyncio.Task | Any] = []
+        source_timeout = 18.0
         if "indeed" in sources:
-            tasks.append(self._scrape_indeed_web(keywords, location, filters))
+            tasks.append(asyncio.wait_for(self._scrape_indeed_web(keywords, location, filters), timeout=source_timeout))
         if "stepstone" in sources:
-            tasks.append(self._scrape_stepstone(keywords, location, filters))
+            tasks.append(asyncio.wait_for(self._scrape_stepstone(keywords, location, filters), timeout=source_timeout))
         if "linkedin" in sources:
-            tasks.append(self._scrape_linkedin_guest(keywords, location, filters))
+            tasks.append(asyncio.wait_for(self._scrape_linkedin_guest(keywords, location, filters), timeout=source_timeout))
         if "arbeitnow" in sources:
-            tasks.append(self._scrape_arbeitnow(keywords, location, filters))
+            tasks.append(asyncio.wait_for(self._scrape_arbeitnow(keywords, location, filters), timeout=source_timeout))
         if "berlinstartupjobs" in sources:
-            tasks.append(self._scrape_berlinstartupjobs(keywords, location, filters))
+            tasks.append(asyncio.wait_for(self._scrape_berlinstartupjobs(keywords, location, filters), timeout=source_timeout))
 
         if not tasks:
             return []
@@ -86,6 +88,8 @@ class JobScraper:
                     response = await client.get(url, headers={"User-Agent": self._get_random_ua()})
                     if response.status_code >= 400:
                         break
+                    if self._looks_like_cloudflare_challenge(response.text):
+                        break
 
                     soup = BeautifulSoup(response.text, "html.parser")
                     cards = self._collect_indeed_cards(soup)
@@ -105,6 +109,147 @@ class JobScraper:
 
                 if jobs:
                     break
+
+        if jobs:
+            return jobs
+        # Keep fallback lightweight to avoid long tail latency in multi-source searches.
+        return await self._scrape_indeed_search_fallback(keywords, location, filters)
+
+    async def _scrape_indeed_playwright(self, keywords: str, location: str, filters: dict[str, Any]) -> list[dict[str, Any]]:
+        if async_playwright is None:
+            return []
+
+        page_size = 10
+        max_jobs = max(10, settings.max_jobs_per_source)
+        max_pages = max(1, settings.max_scrape_pages)
+        jobs: list[dict[str, Any]] = []
+        base_urls = ("https://de.indeed.com", "https://www.indeed.com")
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent=self._get_random_ua(),
+                viewport={"width": 1440, "height": 900},
+                locale="de-DE",
+            )
+            page = await context.new_page()
+            try:
+                for base_url in base_urls:
+                    for page_idx, start in enumerate(range(0, max_jobs, page_size)):
+                        if page_idx >= max_pages:
+                            break
+                        url = f"{base_url}/jobs?q={quote_plus(keywords)}&l={quote_plus(location)}&sort=date&start={start}"
+                        await page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                        await page.wait_for_timeout(2500)
+
+                        html_content = await page.content()
+                        if self._looks_like_cloudflare_challenge(html_content):
+                            await page.wait_for_timeout(4500)
+                            html_content = await page.content()
+                            if self._looks_like_cloudflare_challenge(html_content):
+                                continue
+
+                        soup = BeautifulSoup(html_content, "html.parser")
+                        cards = self._collect_indeed_cards(soup)
+                        if not cards:
+                            break
+
+                        for card in cards:
+                            parsed = self._parse_indeed_card(card, base_url)
+                            if parsed and self._matches_filters(parsed, filters):
+                                jobs.append(parsed)
+                            if len(jobs) >= max_jobs:
+                                break
+
+                        if len(jobs) >= max_jobs:
+                            break
+                        await asyncio.sleep(settings.scrape_delay_seconds)
+
+                    if jobs:
+                        break
+            finally:
+                await browser.close()
+
+        return jobs
+
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(min=1, max=4))
+    async def _scrape_indeed_search_fallback(
+        self,
+        keywords: str,
+        location: str,
+        filters: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        jobs: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        max_jobs = max(10, settings.max_jobs_per_source)
+        max_pages = max(1, min(settings.max_scrape_pages, 2))
+
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            for page in range(max_pages):
+                response = await client.get(
+                    "https://duckduckgo.com/html/",
+                    params={
+                        "q": f"site:de.indeed.com/viewjob {keywords} {location}",
+                        "s": page * 30,
+                    },
+                    headers={"User-Agent": self._get_random_ua()},
+                )
+                if response.status_code >= 400:
+                    break
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                results = soup.select(".result")
+                if not results:
+                    break
+
+                for result in results:
+                    link_el = result.select_one("a.result__a[href], h2.result__title a[href], a[href]")
+                    if not link_el:
+                        continue
+                    raw_href = link_el.get("href", "").strip()
+                    resolved = self._resolve_search_result_url(raw_href)
+                    if "indeed." not in resolved.lower():
+                        continue
+
+                    job_id = self._indeed_job_id_from_href(resolved)
+                    canonical = (
+                        f"https://de.indeed.com/viewjob?jk={job_id}"
+                        if job_id
+                        else resolved
+                    )
+                    unique_key = job_id or canonical
+                    if not unique_key or unique_key in seen:
+                        continue
+                    seen.add(unique_key)
+
+                    title = html.unescape(link_el.get_text(" ", strip=True))[:500]
+                    snippet_el = result.select_one(".result__snippet")
+                    snippet = html.unescape(snippet_el.get_text(" ", strip=True)) if snippet_el else ""
+                    if not title:
+                        continue
+
+                    combined_text = f"{title} {snippet}"
+                    keywords_list = self.parser._extract_skills(combined_text) + self.parser._extract_keywords(combined_text)[:10]
+                    parsed = {
+                        "source": "indeed",
+                        "external_job_id": str(job_id or f"indeed-{random.randint(1000, 9999)}")[:255],
+                        "title": title,
+                        "company": "Unknown",
+                        "location": location[:255] if location else "Germany",
+                        "description": snippet[:2000],
+                        "requirements": snippet[:1000],
+                        "url": canonical[:1000],
+                        "posted_date": date.today(),
+                        "keywords": list(dict.fromkeys(k.lower() for k in keywords_list if k)),
+                    }
+                    if self._matches_filters(parsed, filters):
+                        jobs.append(parsed)
+                    if len(jobs) >= max_jobs:
+                        break
+
+                if len(jobs) >= max_jobs:
+                    break
+                await asyncio.sleep(settings.scrape_delay_seconds)
 
         return jobs
 
@@ -146,35 +291,52 @@ class JobScraper:
         jobs: list[dict[str, Any]] = []
         max_jobs = max(15, settings.max_jobs_per_source)
         max_pages = max(1, settings.max_scrape_pages)
+        keyword_tokens = [token for token in re.split(r"\W+", keywords.lower()) if token]
+
+        candidate_urls = [
+            "https://berlinstartupjobs.com/",
+            "https://berlinstartupjobs.com/engineering/",
+        ]
+        for token in keyword_tokens[:3]:
+            if len(token) > 2:
+                candidate_urls.append(f"https://berlinstartupjobs.com/skill-areas/{token}/")
+        seen_urls: set[str] = set()
+        candidate_urls = [url for url in candidate_urls if not (url in seen_urls or seen_urls.add(url))]
 
         async with httpx.AsyncClient(timeout=20) as client:
-            for page in range(1, max_pages + 1):
-                response = await client.get(
-                    "https://berlinstartupjobs.com/jobs/",
-                    params={
-                        "search_keywords": keywords,
-                        "search_location": location,
-                        "paged": page,
-                    },
-                    headers={"User-Agent": self._get_random_ua()},
-                )
-                if response.status_code >= 400:
-                    break
-                soup = BeautifulSoup(response.text, "html.parser")
-                cards = soup.select("li.job_listing, article.job-listing, div.job-listing")
-                if not cards:
-                    break
+            for base_url in candidate_urls:
+                for page in range(1, max_pages + 1):
+                    page_url = base_url if page == 1 else f"{base_url.rstrip('/')}/page/{page}/"
+                    response = await client.get(page_url, headers={"User-Agent": self._get_random_ua()})
+                    if response.status_code >= 400:
+                        break
+                    if "page not found" in response.text.lower():
+                        break
 
-                for card in cards:
-                    parsed = self._parse_berlinstartupjobs_card(card)
-                    if parsed and self._matches_filters(parsed, filters):
-                        jobs.append(parsed)
+                    soup = BeautifulSoup(response.text, "html.parser")
+                    cards = soup.select("li.bjs-jlis, li.job_listing, article.job-listing, div.job-listing")
+                    if not cards:
+                        break
+
+                    for card in cards:
+                        parsed = self._parse_berlinstartupjobs_card(card)
+                        if not parsed:
+                            continue
+                        if keyword_tokens:
+                            haystack = f"{parsed.get('title', '')} {parsed.get('company', '')} {parsed.get('description', '')}".lower()
+                            if not any(token in haystack for token in keyword_tokens):
+                                continue
+                        if self._matches_filters(parsed, filters):
+                            jobs.append(parsed)
+                        if len(jobs) >= max_jobs:
+                            break
+
                     if len(jobs) >= max_jobs:
                         break
+                    await asyncio.sleep(settings.scrape_delay_seconds)
 
                 if len(jobs) >= max_jobs:
                     break
-                await asyncio.sleep(settings.scrape_delay_seconds)
 
         return jobs
 
@@ -218,12 +380,63 @@ class JobScraper:
         return jobs
 
     async def _scrape_stepstone(self, keywords: str, location: str, filters: dict[str, Any]) -> list[dict[str, Any]]:
+        jobs: list[dict[str, Any]] = []
+        max_jobs = max(10, settings.max_jobs_per_source)
+        max_pages = max(1, settings.max_scrape_pages)
+        keyword_slug = self._slugify_for_path(keywords)
+
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            for page_num in range(1, max_pages + 1):
+                urls = [
+                    f"https://www.stepstone.de/jobs/{keyword_slug}?where={quote_plus(location)}&page={page_num}&sort=2",
+                    f"https://www.stepstone.de/jobs/{quote_plus(keywords)}?where={quote_plus(location)}&page={page_num}&sort=2",
+                ]
+                response = None
+                for search_url in urls:
+                    candidate = await client.get(search_url, headers={"User-Agent": self._get_random_ua()})
+                    if candidate.status_code < 400:
+                        response = candidate
+                        break
+                if response is None:
+                    break
+
+                soup = BeautifulSoup(response.text, "html.parser")
+                cards = soup.select("article[data-testid='job-item']") or soup.find_all("article")
+                if not cards:
+                    break
+
+                parsed_on_page = 0
+                for card in cards:
+                    parsed = self._parse_stepstone_card(card, default_location=location)
+                    if parsed and self._matches_filters(parsed, filters):
+                        jobs.append(parsed)
+                        parsed_on_page += 1
+                    if len(jobs) >= max_jobs:
+                        break
+
+                if len(jobs) >= max_jobs:
+                    break
+                if page_num == 1 and parsed_on_page == 0:
+                    break
+                await asyncio.sleep(settings.scrape_delay_seconds)
+
+        if jobs:
+            return jobs
+        return await self._scrape_stepstone_playwright(keywords, location, filters)
+
+    async def _scrape_stepstone_playwright(
+        self,
+        keywords: str,
+        location: str,
+        filters: dict[str, Any],
+    ) -> list[dict[str, Any]]:
         if async_playwright is None:
             return []
 
         jobs: list[dict[str, Any]] = []
         max_jobs = max(10, settings.max_jobs_per_source)
         max_pages = max(1, settings.max_scrape_pages)
+        keyword_slug = self._slugify_for_path(keywords)
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -232,20 +445,20 @@ class JobScraper:
             try:
                 for page_num in range(1, max_pages + 1):
                     search_url = (
-                        f"https://www.stepstone.de/jobs/{quote_plus(keywords)}"
+                        f"https://www.stepstone.de/jobs/{keyword_slug}"
                         f"?where={quote_plus(location)}&page={page_num}&sort=2"
                     )
-                    await page.goto(search_url, wait_until="domcontentloaded", timeout=30000)
-                    await page.wait_for_timeout(1200)
+                    await page.goto(search_url, wait_until="domcontentloaded", timeout=45000)
+                    await page.wait_for_timeout(1500)
 
-                    html = await page.content()
-                    soup = BeautifulSoup(html, "html.parser")
-                    cards = soup.find_all("article")
+                    html_content = await page.content()
+                    soup = BeautifulSoup(html_content, "html.parser")
+                    cards = soup.select("article[data-testid='job-item']") or soup.find_all("article")
                     if not cards:
                         break
 
                     for card in cards:
-                        parsed = self._parse_stepstone_card(card)
+                        parsed = self._parse_stepstone_card(card, default_location=location)
                         if parsed and self._matches_filters(parsed, filters):
                             jobs.append(parsed)
                         if len(jobs) >= max_jobs:
@@ -343,7 +556,7 @@ class JobScraper:
 
         return {
             "source": "indeed",
-            "external_job_id": str(job_id)[:255] or f"indeed-{random.randint(1000, 9999)}",
+            "external_job_id": (str(job_id).strip() if job_id else f"indeed-{random.randint(1000, 9999)}")[:255],
             "title": title_text,
             "company": (company_el.get_text(" ", strip=True) if company_el else "Unknown")[:255],
             "location": (location_el.get_text(" ", strip=True) if location_el else "Unknown")[:255],
@@ -358,12 +571,21 @@ class JobScraper:
             "keywords": list(dict.fromkeys(k.lower() for k in keywords if k)),
         }
 
-    def _parse_stepstone_card(self, card: Any) -> dict[str, Any] | None:
-        title_el = card.find(["h2", "h3"])
-        link_el = self._pick_stepstone_job_link(card)
+    def _parse_stepstone_card(self, card: Any, default_location: str | None = None) -> dict[str, Any] | None:
+        if hasattr(card, "find_all"):
+            for noisy in card.find_all(["style", "script"]):
+                noisy.decompose()
+
+        title_link_el = None
+        if hasattr(card, "select_one"):
+            title_link_el = card.select_one("a[data-testid='job-item-title'][href]")
+
+        title_el = title_link_el or card.find(["h2", "h3"])
+        link_el = title_link_el or self._pick_stepstone_job_link(card)
         company_el = card.find(attrs={"data-at": "job-item-company-name"})
         location_el = card.find(attrs={"data-at": "job-item-location"})
-        snippet_el = card.find("p")
+        snippet_el = card.find(attrs={"data-at": re.compile(r"job-item-(teaser|description)", re.I)}) or card.find("p")
+        posted_el = card.find("time")
 
         if not title_el or not link_el:
             return None
@@ -372,19 +594,31 @@ class JobScraper:
         if not url:
             return None
 
-        description = snippet_el.get_text(" ", strip=True) if snippet_el else ""
-        keywords = self.parser._extract_skills(description) + self.parser._extract_keywords(description)[:10]
+        title_text = title_el.get_text(" ", strip=True)
+        title_text = html.unescape(re.sub(r"\s+", " ", title_text)).strip()
+        if not title_text:
+            return None
+
+        description = html.unescape(snippet_el.get_text(" ", strip=True)) if snippet_el else ""
+        company_text = company_el.get_text(" ", strip=True) if company_el else "Unknown"
+        location_text = location_el.get_text(" ", strip=True) if location_el else (default_location or "Germany")
+        posted_raw = posted_el.get("datetime") if posted_el and posted_el.has_attr("datetime") else (posted_el.get_text(" ", strip=True) if posted_el else "today")
+        keywords = self.parser._extract_skills(description) + self.parser._extract_keywords(f"{title_text} {description}")[:10]
 
         return {
             "source": "stepstone",
-            "external_job_id": (self._stepstone_external_id_from_url(url) or link_el.get("data-genesis-element") or f"stepstone-{random.randint(1000, 9999)}")[:255],
-            "title": title_el.get_text(" ", strip=True)[:500],
-            "company": (company_el.get_text(" ", strip=True) if company_el else "Unknown")[:255],
-            "location": (location_el.get_text(" ", strip=True) if location_el else "Unknown")[:255],
+            "external_job_id": (
+                self._stepstone_external_id_from_url(url)
+                or link_el.get("data-genesis-element")
+                or f"stepstone-{random.randint(1000, 9999)}"
+            )[:255],
+            "title": title_text[:500],
+            "company": company_text[:255],
+            "location": location_text[:255],
             "description": description[:2000],
             "requirements": description[:1000],
             "url": url[:1000],
-            "posted_date": date.today(),
+            "posted_date": self._parse_relative_date(posted_raw) or date.today(),
             "keywords": list(dict.fromkeys(k.lower() for k in keywords if k)),
         }
 
@@ -445,27 +679,35 @@ class JobScraper:
             return None
         company = (item.get("company_name") or "Unknown").strip()
         loc = (item.get("location") or "").strip()
-        if location and location.lower().find("germany") >= 0:
-            if loc and "germany" not in loc.lower() and "berlin" not in loc.lower() and "remote" not in loc.lower():
-                return None
-        combined = f"{title} {company} {loc}".lower()
+        location_lower = (location or "").lower().strip()
+        requested_city = location_lower.split(",")[0].strip() if location_lower else ""
+        loc_lower = loc.lower()
+        if requested_city and requested_city not in ("germany", "deutschland"):
+            if requested_city not in loc_lower and "remote" not in loc_lower:
+                # If country-level scope was requested, keep wider Germany opportunities.
+                if "germany" not in location_lower and "deutschland" not in location_lower:
+                    return None
+        description_html = item.get("description") or ""
+        description = BeautifulSoup(description_html, "html.parser").get_text(" ", strip=True)
+        tags = item.get("tags") or []
+        combined = f"{title} {company} {loc} {description} {' '.join(str(tag) for tag in tags)}".lower()
         if keywords:
             keyword_tokens = [token.strip().lower() for token in keywords.split() if token.strip()]
             if keyword_tokens and not any(token in combined for token in keyword_tokens):
                 return None
 
-        description_html = item.get("description") or ""
-        description = BeautifulSoup(description_html, "html.parser").get_text(" ", strip=True)
-        tags = item.get("tags") or []
         url = (item.get("url") or item.get("slug") or "").strip()
         if url and not url.startswith("http"):
             url = f"https://www.arbeitnow.com/jobs/{url.strip('/')}"
         if not url:
             return None
 
-        created_at = item.get("created_at") or ""
+        created_at = item.get("created_at")
         posted_date = None
-        if created_at:
+        if isinstance(created_at, (int, float)):
+            with contextlib.suppress(ValueError, OSError, OverflowError):
+                posted_date = datetime.fromtimestamp(float(created_at), tz=timezone.utc).date()
+        elif isinstance(created_at, str) and created_at:
             with contextlib.suppress(ValueError):
                 posted_date = datetime.fromisoformat(created_at.replace("Z", "+00:00")).date()
 
@@ -485,12 +727,12 @@ class JobScraper:
         }
 
     def _parse_berlinstartupjobs_card(self, card: Any) -> dict[str, Any] | None:
-        link_el = card.select_one("a[href]")
-        title_el = card.select_one("h3, h2, .job_listing-title")
-        company_el = card.select_one(".company, .job_listing-company, .job_listing-company strong")
+        link_el = card.select_one("h4 a[href], h3 a[href], h2 a[href], a[href]")
+        title_el = card.select_one("h4, h3, h2, .job_listing-title")
+        company_el = card.select_one(".bjs-jlis__b, .company, .job_listing-company, .job_listing-company strong")
         location_el = card.select_one(".location, .job_listing-location")
         date_el = card.select_one("time, .date")
-        desc_el = card.select_one(".job_listing-description, .excerpt, p")
+        desc_el = card.select_one(".job_listing-description, .excerpt, .bjs-jlis__featured, p")
 
         if not link_el:
             return None
@@ -575,7 +817,23 @@ class JobScraper:
             return f"{base_url}{href}"
         return urljoin(f"{base_url}/", href)
 
+    def _resolve_search_result_url(self, href: str) -> str:
+        if not href:
+            return ""
+        normalized = self._normalize_url(href, "https://duckduckgo.com")
+        parsed = urlparse(normalized)
+        query = parse_qs(parsed.query)
+        target = query.get("uddg", [None])[0]
+        if target:
+            return target
+        return normalized
+
     def _pick_stepstone_job_link(self, card: Any) -> Any | None:
+        if hasattr(card, "select_one"):
+            direct = card.select_one("a[data-testid='job-item-title'][href]")
+            if direct:
+                return direct
+
         anchors = card.find_all("a", href=True)
         if not anchors:
             return None
@@ -591,10 +849,19 @@ class JobScraper:
         return anchors[0]
 
     def _stepstone_external_id_from_url(self, url: str) -> str:
-        parsed = urlparse(url)
-        if not parsed.path:
+        if not url:
             return ""
-        slug = parsed.path.strip("/").split("/")[-1]
+        parsed = urlparse(url)
+        path = parsed.path or ""
+        if not path:
+            return ""
+        numeric = re.search(r"/job/(\d+)", path)
+        if numeric:
+            return numeric.group(1)[:255]
+        legacy = re.search(r"--(\d+)(?:-[a-z]+)?(?:\.html)?$", path)
+        if legacy:
+            return legacy.group(1)[:255]
+        slug = path.strip("/").split("/")[-1]
         return slug[:255]
 
     def _linkedin_job_id_from_url(self, url: str) -> str:
@@ -627,3 +894,18 @@ class JobScraper:
         if direct:
             return direct.group(1)
         return ""
+
+    def _looks_like_cloudflare_challenge(self, content: str) -> bool:
+        if not content:
+            return False
+        lowered = content.lower()
+        return (
+            "cf-chl-opt" in lowered
+            or "cdn-cgi/challenge-platform" in lowered
+            or "just a moment..." in lowered
+            or "enable javascript and cookies to continue" in lowered
+        )
+
+    def _slugify_for_path(self, value: str) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", (value or "").strip()).strip("-").lower()
+        return slug or quote_plus(value or "")

@@ -116,7 +116,7 @@ def _has_valid_posting_url(job: Job) -> bool:
     if job.source == "linkedin":
         return "linkedin.com" in host and "/jobs/view/" in path
     if job.source == "berlinstartupjobs":
-        return "berlinstartupjobs.com" in host and "/jobs/" in path
+        return "berlinstartupjobs.com" in host and path not in ("", "/")
     if job.source == "arbeitnow":
         return True
     return True

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.services.resume_parser import GERMAN_STOP_WORDS
@@ -161,7 +161,7 @@ class JobMatcher:
         return years
 
     def _duration_to_years(self, duration: str) -> float:
-        current_year = datetime.now(UTC).year
+        current_year = datetime.now(timezone.utc).year
         duration = duration.lower().replace("present", str(current_year)).replace("heute", str(current_year))
         match = re.search(r"(20\d{2})\s*[-–]\s*(20\d{2})", duration)
         if match:
