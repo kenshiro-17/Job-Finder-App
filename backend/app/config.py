@@ -8,7 +8,7 @@ from urllib.parse import unquote
 
 @dataclass
 class Settings:
-    app_name: str = "Job Finder"
+    app_name: str = "Match Pilot"
     environment: str = os.getenv("ENV", "development")
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./db/jobs.db")
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379")

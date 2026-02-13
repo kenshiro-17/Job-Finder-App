@@ -18,7 +18,7 @@ from app.models.user import User
 security = HTTPBearer(auto_error=False)
 DEFAULT_ITERATIONS = 210_000
 TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", str(60 * 60 * 24 * 14)))
-AUTH_SECRET = os.getenv("AUTH_SECRET", "job-finder-dev-secret")
+AUTH_SECRET = os.getenv("AUTH_SECRET", "match-pilot-dev-secret")
 
 
 def hash_password(password: str) -> str:

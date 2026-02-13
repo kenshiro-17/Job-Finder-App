@@ -1,4 +1,4 @@
-# Job Finder
+# Match Pilot
 
 Self-hosted job search assistant for Germany-focused sources (Indeed + StepStone + LinkedIn + Arbeitnow + BerlinStartupJobs), powered by resume matching and application tracking.
 
@@ -93,7 +93,7 @@ MAX_STORED_JOBS_PER_USER=10000
 2. Set root directory to `frontend`.
 3. Edit `frontend/vercel.json` and replace:
    - `https://REPLACE_WITH_YOUR_RAILWAY_DOMAIN`
-   - with your Railway backend domain, e.g. `https://job-finder-api.up.railway.app`
+   - with your Railway backend domain, e.g. `https://match-pilot-api.up.railway.app`
 4. Deploy on Vercel.
 
 Now all frontend `/api/*` calls are proxied by Vercel to Railway, so no browser CORS setup is required.
