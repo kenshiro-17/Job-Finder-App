@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE_WITH_YOUR_RAILWAY_DOMAIN/api/:path*"
+      "destination": "https://backend-production-69e8.up.railway.app/api/:path*"
     }
   ]
 }
