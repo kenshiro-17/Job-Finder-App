@@ -72,13 +72,15 @@ Best,
         custom_intro: str = "",
     ) -> str:
         template = self.templates.get(tone, self.templates["professional"])
+        experiences = resume_data.get("experience", []) or []
+        first_exp = experiences[0] if experiences and isinstance(experiences[0], dict) else {}
         context = {
             "job_title": job_data.get("title", "the role"),
             "company_name": job_data.get("company", "the company"),
-            "years_experience": self._estimate_years(resume_data.get("experience", [])),
+            "years_experience": self._estimate_years(experiences),
             "primary_skill_area": self._get_primary_skill_area(resume_data),
             "top_skills": resume_data.get("skills", [])[:5],
-            "last_job_title": (resume_data.get("experience", [{}])[0] or {}).get("title", "my recent role"),
+            "last_job_title": first_exp.get("title", "my recent role"),
             "key_job_requirement": self._extract_key_requirement(job_data),
             "relevant_experience": self._find_relevant_experience(resume_data, job_data),
             "candidate_name": self._extract_name(resume_data),
